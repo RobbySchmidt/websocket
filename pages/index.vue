@@ -5,21 +5,8 @@
       @click="doLogout">
       Logout
     </button>
-    <div
-      ref="messagesContainer"  
-      class="h-128 border border-gray-300 rounded-md p-1 space-y-1 overflow-y-auto">
-      <div v-for="message in messages">
-        <p 
-          class="p-1 rounded-md flex justify-between"
-          :class="message.name === user.first_name ? 'bg-blue-300' : 'bg-red-100'">
-          <span>{{ message.name }}: {{ message.content }}</span>
-          <span>{{ message.date_created }}</span>
-        </p>
-      </div>
-    </div>
-
     <form 
-      @submit.prevent="sendMessage"
+      @submit.prevent="createInput"
       class="flex gap-6">
 
       <input
@@ -33,6 +20,33 @@
           Send
         </button>
     </form>
+
+    <div v-for="item in items">
+      <p 
+        class="p-1 rounded-md space-y-1">
+        <div class="flex justify-between">
+          <span>{{ item.item }}</span> 
+          <div class="flex justify-between gap-4">
+            <input
+              v-model="newInput"
+              type="text"
+              class="border border-gray-300 rounded-md w-full">
+
+            <button
+              @click="updateInput(item.id)" 
+              class="bg-green-500 text-white px-3 py-1 rounded-md hover:bg-green-600 duration-300 easy-in-out cursor-pointer">
+              update
+            </button>
+
+            <button
+              @click="deleteInput(item.id)" 
+              class="bg-red-500 text-white px-3 py-1 rounded-md hover:bg-red-600 duration-300 easy-in-out cursor-pointer">
+              delete
+            </button>
+          </div>
+        </div>
+      </p>
+    </div>
   </div>
 </template>
 
@@ -49,71 +63,108 @@
   };
 
   const userInput = ref('')
-  const messages = ref([])
-  const messagesContainer = ref(null)
-  const user = useDirectusUser();
+  const newInput = ref('')
 
-  console.log(messages.value)
+  const { getItems, createItems, deleteItems, updateItem } = useDirectusItems();
 
-  const { getItems, createItems } = useDirectusItems();
+  const items = ref([])
 
-  const fetchMessages = async () => {
-  try {
-    const latest = messages.value[messages.value.length - 1];
-    const newerMessages = await getItems({
-      collection: "messages",
-      params: {
-        fields: ['*'],
-        filter: latest ? { 
-          date_created: { 
-            _gt: latest.date_created } 
-          } : {},
-        sort: ['date_created'],
-      }
-    });
+  items.value = await getItems({
+    collection: "items",
+    params: { fields: ['*'] }
+  })
 
-    console.log(messages.value)
-
-    messagesContainer.value.scrollTo({
-      top: messagesContainer.value.scrollHeight,
-      behavior: 'smooth'
-    })
-
-    if (newerMessages.length > 0) {
-      messages.value.push(...newerMessages);
-    }
-
-    console.log(newerMessages)
-  } catch (e) {}
-};
   
-  const sendMessage = async () => {
+  const createInput = async () => {
     if (!userInput.value) return
     
     try {
       await createItems({ 
-        collection: "messages", 
+        collection: "items", 
         items: {
-          name: user.value.first_name,
-          content: userInput.value,
+          item: userInput.value,
         }
       });
 
       userInput.value = ''
-      await fetchMessages()
       
 
     } catch (e) {}
   };
 
-  const startPolling = () => {
-    setInterval(fetchMessages, 1000);
+  const updateInput = async (id) => {
+    if (!newInput.value) return
+
+    try {
+      await updateItem({ 
+        collection: "items", 
+        id: id,
+        item: {
+          item: newInput.value,
+        }
+      });
+
+      newInput.value = ''
+      
+
+    } catch (e) {}
   };
 
-  onMounted(() => {
-    fetchMessages();
-    startPolling();
-  });
+  const deleteInput = async (id) => {
+    try {
+      await deleteItems({ 
+        collection: "items", 
+        items: [ id ]
+      });
+    } catch (e) {}
+  };
+
+  const url = import.meta.env.VITE_WEBSOCKET_URL
+  const access_token = import.meta.env.VITE_DIRECTUS_API_TOKEN
+
+  const connection = new WebSocket(url)
+
+  connection.addEventListener('open', () => {
+    console.log("WS opened, authenticating...")
+
+    connection.send(JSON.stringify({
+      type: "auth",
+      access_token
+    }))
+  })
+
+  connection.addEventListener('message', (event) => {
+    const data = JSON.parse(event.data)
+    console.log("WS message:", data)
+
+    if (data.type === "auth" && data.status === "ok") {
+      console.log("Authenticated! Now subscribing...")
+
+      connection.send(JSON.stringify({
+        type: "subscribe",
+        collection: "items",
+        uid: "items-subscription"
+      }))
+    }
+
+    if (data.type === "subscription") {
+
+      if (data.event === "create") {
+        items.value.push(data.data[0])
+      }
+
+      if (data.event === "update") {
+        const index = items.value.findIndex(i => i.id === data.data[0].id)
+        if (index !== -1) {
+          items.value[index] = data.data[0]
+        }
+      }
+
+      if (data.event === "delete") {
+        items.value = items.value.filter(i => i.id !== data.data[0])
+      }
+    }
+  }) 
 </script>
 
 <style scoped>
