@@ -103,8 +103,8 @@
     } catch (e) {}
   };
 
-  const url = 'wss://directuscon.axtlust.de/websocket'
-  const access_token = 'ru4op27nGb8llU2civENYgnJmeNU7Asu'
+  const url = import.meta.env.VITE_WEBSOCKET_URL
+  const access_token = import.meta.env.VITE_DIRECTUS_API_TOKEN
 
   const connection = new WebSocket(url)
 
@@ -148,11 +148,7 @@
         items.value = items.value.filter(i => i.id !== data.data[0])
       }
     }
-  })
-
-
-
- 
+  }) 
 </script>
 
 <style scoped>
