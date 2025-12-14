@@ -1,5 +1,5 @@
 <template>
-  <div class="max-w-5xl mx-auto p-4 space-y-4">
+  <div class="max-w-3xl mx-auto p-4">
     <button
       class="bg-red-500 rounded-md px-3 py-1 text-white hover:cursor-pointer hover:bg-red-400 duration-300 ease-in-out ml-auto block"
       @click="doLogout">
@@ -7,7 +7,7 @@
     </button>
     <form 
       @submit.prevent="createInput"
-      class="flex gap-6">
+      class="flex gap-6 my-4">
 
       <input
         v-model="userInput"
@@ -16,37 +16,45 @@
 
         <button 
           type="submit"
-          class="bg-green-500 rounded-md px-3 py-1 text-white hover:cursor-pointer hover:bg-green-400 duration-300 ease-in-out">
-          Send
+          class="bg-green-500 flex-none rounded-md px-3 py-1 text-white hover:cursor-pointer hover:bg-green-400 duration-300 ease-in-out">
+          add to list
         </button>
     </form>
 
-    <div v-for="item in items">
-      <p 
-        class="p-1 rounded-md space-y-1">
-        <div class="flex justify-between">
-          <span>{{ item.item }}</span> 
-          <div class="flex justify-between gap-4">
-            <input
-              v-model="newInput"
-              type="text"
-              class="border border-gray-300 rounded-md w-full">
+    <ul v-for="item in tasks">
+      <li class="flex justify-between space-y-1">
+        <span
+          :class="{'line-through' : item.done}">
+          {{ item.task }}
+        </span> 
+        <div class="flex justify-between gap-1">
+          <button
+            @click="updateTask(item)" 
+            class="cursor-pointer">
+            <svg xmlns="http://www.w3.org/2000/svg" 
+              fill="white" 
+              viewBox="0 0 24 24" 
+              stroke-width="1.5" 
+              :stroke="item.done ? '#22c55e' : '#eab308'" 
+              class="size-6">
+              <path 
+                stroke-linecap="round" 
+                stroke-linejoin="round" 
+                d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+            </svg>
 
-            <button
-              @click="updateInput(item.id)" 
-              class="bg-green-500 text-white px-3 py-1 rounded-md hover:bg-green-600 duration-300 easy-in-out cursor-pointer">
-              update
-            </button>
+          </button>
 
-            <button
-              @click="deleteInput(item.id)" 
-              class="bg-red-500 text-white px-3 py-1 rounded-md hover:bg-red-600 duration-300 easy-in-out cursor-pointer">
-              delete
-            </button>
-          </div>
+          <button
+            @click="deleteInput(item.id)" 
+            class="cursor-pointer">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="white" viewBox="0 0 24 24" stroke-width="1.5" stroke="#ef4444" class="size-6">
+              <path stroke-linecap="round" stroke-linejoin="round" d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+            </svg>
+          </button>
         </div>
-      </p>
-    </div>
+      </li>
+    </ul>
   </div>
 </template>
 
@@ -67,10 +75,10 @@
 
   const { getItems, createItems, deleteItems, updateItem } = useDirectusItems();
 
-  const items = ref([])
+  const tasks = ref([])
 
-  items.value = await getItems({
-    collection: "items",
+  tasks.value = await getItems({
+    collection: "tasks",
     params: { fields: ['*'] }
   })
 
@@ -80,9 +88,9 @@
     
     try {
       await createItems({ 
-        collection: "items", 
+        collection: "tasks", 
         items: {
-          item: userInput.value,
+          task: userInput.value,
         }
       });
 
@@ -92,28 +100,24 @@
     } catch (e) {}
   };
 
-  const updateInput = async (id) => {
-    if (!newInput.value) return
+  const updateTask = async (item) => {
+    item.done = !item.done
 
     try {
-      await updateItem({ 
-        collection: "items", 
-        id: id,
-        item: {
-          item: newInput.value,
+      await updateItem({
+        collection: "tasks",
+        id: item.id,
+        item: { 
+          done: item.done 
         }
-      });
-
-      newInput.value = ''
-      
-
+      })
     } catch (e) {}
-  };
+  }
 
   const deleteInput = async (id) => {
     try {
       await deleteItems({ 
-        collection: "items", 
+        collection: "tasks", 
         items: [ id ]
       });
     } catch (e) {}
@@ -142,7 +146,7 @@
 
       connection.send(JSON.stringify({
         type: "subscribe",
-        collection: "items",
+        collection: "tasks",
         uid: "items-subscription"
       }))
     }
@@ -150,18 +154,18 @@
     if (data.type === "subscription") {
 
       if (data.event === "create") {
-        items.value.push(data.data[0])
+        tasks.value.push(data.data[0])
       }
 
       if (data.event === "update") {
-        const index = items.value.findIndex(i => i.id === data.data[0].id)
+        const index = tasks.value.findIndex(i => i.id === data.data[0].id)
         if (index !== -1) {
-          items.value[index] = data.data[0]
+          tasks.value[index] = data.data[0]
         }
       }
 
       if (data.event === "delete") {
-        items.value = items.value.filter(i => i.id !== data.data[0])
+        tasks.value = tasks.value.filter(i => i.id !== data.data[0])
       }
     }
   }) 
